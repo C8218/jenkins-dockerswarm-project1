@@ -1,24 +1,23 @@
 pipeline {
     agent any
-    environment{
+    environment {
         PATH=sh(script:"echo $PATH:/usr/local/bin", returnStdout:true).trim()
         AWS_REGION = "us-east-1"
         AWS_ACCOUNT_ID=sh(script:'export PATH="$PATH:/usr/local/bin" && aws sts get-caller-identity --query Account --output text', returnStdout:true).trim()
         ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        // ECR_REGISTRY = "046402772087.dkr.ecr.us-east-1.amazonaws.com"
         APP_REPO_NAME = "clarusway-repo/phonebook-app"
         APP_NAME = "phonebook"
-        AWS_STACK_NAME = "Davids-Phonebook-App-${BUILD_NUMBER}"
+        AWS_STACK_NAME = "Call-Phonebook-App-${BUILD_NUMBER}"
         CFN_TEMPLATE="phonebook-docker-swarm-cfn-template.yml"
         CFN_KEYPAIR="ec2_key"
         HOME_FOLDER = "/home/ec2-user"
         GIT_FOLDER = sh(script:'echo ${GIT_URL} | sed "s/.*\\///;s/.git$//"', returnStdout:true).trim()
-
     }
-
     stages {
-        stage('creating ECR Repository') {
+        stage('Create ECR Repo') {
             steps {
-                echo 'creating ECR Repository'
+                echo 'Creating ECR Repo for App'
                 sh """
                 aws ecr create-repository \
                   --repository-name ${APP_REPO_NAME} \
@@ -28,34 +27,29 @@ pipeline {
                 """
             }
         }
-        stage('building Docker Image') {
+        stage('Build App Docker Image') {
             steps {
-                echo 'building Docker Image'
+                echo 'Building App Image'
                 sh 'docker build --force-rm -t "$ECR_REGISTRY/$APP_REPO_NAME:latest" .'
                 sh 'docker image ls'
             }
         }
-        stage('pushing Docker image to ECR Repository'){
+        stage('Push Image to ECR Repo') {
             steps {
-                echo 'pushing Docker image to ECR Repository'
+                echo 'Pushing App Image to ECR Repo'
                 sh 'aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin "$ECR_REGISTRY"'
                 sh 'docker push "$ECR_REGISTRY/$APP_REPO_NAME:latest"'
-
             }
         }
-        stage('creating infrastructure for the Application') {
+        stage('Create Infrastructure for the App') {
             steps {
-                echo 'creating infrastructure for the Application'
+                echo 'Creating Infrastructure for the App on AWS Cloud'
                 sh "aws cloudformation create-stack --region ${AWS_REGION} --stack-name ${AWS_STACK_NAME} --capabilities CAPABILITY_IAM --template-body file://${CFN_TEMPLATE} --parameters ParameterKey=KeyPairName,ParameterValue=${CFN_KEYPAIR}"
-
-            script {
-                while(true) {
-                        
+                script {
+                    while(true) {
                         echo "Docker Grand Master is not UP and running yet. Will try to reach again after 10 seconds..."
                         sleep(10)
-
                         ip = sh(script:'aws ec2 describe-instances --region ${AWS_REGION} --filters Name=tag-value,Values=docker-grand-master Name=tag-value,Values=${AWS_STACK_NAME} --query Reservations[*].Instances[*].[PublicIpAddress] --output text | sed "s/\\s*None\\s*//g"', returnStdout:true).trim()
-
                         if (ip.length() >= 7) {
                             echo "Docker Grand Master Public Ip Address Found: $ip"
                             env.MASTER_INSTANCE_PUBLIC_IP = "$ip"
@@ -65,26 +59,25 @@ pipeline {
                 }
             }
         }
-        stage('Test the infrastructure') {
+        stage('Test the Infrastructure') {
             steps {
                 echo "Testing if the Docker Swarm is ready or not, by checking Viz App on Grand Master with Public Ip Address: ${MASTER_INSTANCE_PUBLIC_IP}:8080"
-            script {
-                while(true) {
-                    try {
-                      sh "curl -s --connect-timeout 60 ${MASTER_INSTANCE_PUBLIC_IP}:8080"
-                      echo "Successfully connected to Viz App."
-                      break
-                    }
-                    catch(Exception) {
-                      echo 'Could not connect Viz App'
-                      sleep(5)   
+                script {
+                    while(true) {
+                        try {
+                          sh "curl -s --connect-timeout 60 ${MASTER_INSTANCE_PUBLIC_IP}:8080"
+                          echo "Successfully connected to Viz App."
+                          break
+                        }
+                        catch(Exception) {
+                          echo 'Could not connect Viz App'
+                          sleep(5)  
+                        }
                     }
                 }
             }
         }
-    }
-
-        stage('Deploying the Application'){
+        stage('Deploy App on Docker Swarm'){
             environment {
                 MASTER_INSTANCE_ID=sh(script:'aws ec2 describe-instances --region ${AWS_REGION} --filters Name=tag-value,Values=docker-grand-master Name=tag-value,Values=${AWS_STACK_NAME} --query Reservations[*].Instances[*].[InstanceId] --output text', returnStdout:true).trim()
             }
@@ -110,11 +103,7 @@ pipeline {
                   --force
                 """
             echo 'Deleting Cloudformation Stack due to the Failure'
-            sh 'aws cloudformation delete-stack --region ${AWS_REGION} --stack-name ${AWS_STACK_NAME}'
-            echo 'Do not give up! Try again!'
-        }
-        success {
-            echo 'Good job!'
+                sh 'aws cloudformation delete-stack --region ${AWS_REGION} --stack-name ${AWS_STACK_NAME}'
         }
     }
 }
