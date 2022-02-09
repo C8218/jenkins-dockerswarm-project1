@@ -8,7 +8,7 @@ pipeline {
         // ECR_REGISTRY = "046402772087.dkr.ecr.us-east-1.amazonaws.com"
         APP_REPO_NAME = "clarusway-repo/phonebook-app"
         APP_NAME = "phonebook"
-        AWS_STACK_NAME = "brown-Phonebook-App-${BUILD_NUMBER}"
+        AWS_STACK_NAME = "call-Phonebook-App-${BUILD_NUMBER}"
         CFN_TEMPLATE="phonebook-docker-swarm-cfn-template.yml"
         CFN_KEYPAIR="ec2_key"
         HOME_FOLDER = "/home/ec2-user"
