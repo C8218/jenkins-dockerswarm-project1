@@ -1,6 +1,5 @@
 pipeline {
-    agent {
-        label any
+    agent any
     environment{
         PATH=sh(script:"echo $PATH:/usr/local/bin", returnStdout:true).trim()
         AWS_REGION = "us-east-1"
@@ -10,7 +9,7 @@ pipeline {
         APP_NAME = "phonebook"
         AWS_STACK_NAME = "Davids-Phonebook-App-${BUILD_NUMBER}"
         CFN_TEMPLATE="phonebook-docker-swarm-cfn-template.yml"
-        CFN_KEYPAIR="ec2_key"
+        CFN_KEYPAIR="davidskey"
         HOME_FOLDER = "/home/ec2-user"
         GIT_FOLDER = sh(script:'echo ${GIT_URL} | sed "s/.*\\///;s/.git$//"', returnStdout:true).trim()
 
